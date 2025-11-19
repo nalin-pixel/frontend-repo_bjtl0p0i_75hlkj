@@ -1,71 +1,87 @@
+import { useEffect, useMemo, useState } from 'react'
+import Header from './components/Header'
+import DappCard from './components/DappCard'
+import SubmitDappModal from './components/SubmitDappModal'
+import CommentsPanel from './components/CommentsPanel'
+
 function App() {
+  const backendUrl = useMemo(() => import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000', [])
+  const [dapps, setDapps] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showSubmit, setShowSubmit] = useState(false)
+  const [commentsOpen, setCommentsOpen] = useState(false)
+  const [activeDapp, setActiveDapp] = useState(null)
+  const [filters, setFilters] = useState({ category: 'All', chain: 'All' })
+
+  const fetchDapps = async () => {
+    setLoading(true)
+    try {
+      const qs = new URLSearchParams()
+      if (filters.category !== 'All') qs.append('category', filters.category)
+      if (filters.chain !== 'All') qs.append('chain', filters.chain)
+      const res = await fetch(`${backendUrl}/dapps?${qs.toString()}`)
+      const data = await res.json()
+      // ensure id field present
+      setDapps(data.map(d => ({ ...d, id: d.id || d._id })))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchDapps() }, [filters.category, filters.chain])
+
+  const submitDapp = async (payload) => {
+    const res = await fetch(`${backendUrl}/dapps`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    if (res.ok) {
+      setShowSubmit(false)
+      fetchDapps()
+    }
+  }
+
+  const vote = async (id) => {
+    const res = await fetch(`${backendUrl}/dapps/${id}/vote`, { method: 'POST' })
+    if (res.ok) fetchDapps()
+  }
+
+  const openComments = (dapp) => { setActiveDapp(dapp); setCommentsOpen(true) }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      {/* Subtle pattern overlay */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.05),transparent_50%)]"></div>
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+      <Header onOpenSubmit={() => setShowSubmit(true)} />
 
-      <div className="relative min-h-screen flex items-center justify-center p-8">
-        <div className="max-w-2xl w-full">
-          {/* Header with Flames icon */}
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center justify-center mb-6">
-              <img
-                src="/flame-icon.svg"
-                alt="Flames"
-                className="w-24 h-24 drop-shadow-[0_0_25px_rgba(59,130,246,0.5)]"
-              />
-            </div>
-
-            <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">
-              Flames Blue
-            </h1>
-
-            <p className="text-xl text-blue-200 mb-6">
-              Build applications through conversation
-            </p>
-          </div>
-
-          {/* Instructions */}
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-blue-500/20 rounded-2xl p-8 shadow-xl mb-6">
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                1
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Describe your idea</h3>
-                <p className="text-blue-200/80 text-sm">Use the chat panel on the left to tell the AI what you want to build</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                2
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Watch it build</h3>
-                <p className="text-blue-200/80 text-sm">Your app will appear in this preview as the AI generates the code</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                3
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Refine and iterate</h3>
-                <p className="text-blue-200/80 text-sm">Continue the conversation to add features and make changes</p>
-              </div>
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        <section className="mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-white text-2xl font-semibold">Today in Web3</h2>
+            <div className="flex items-center gap-2">
+              <select value={filters.category} onChange={e=>setFilters(f=>({...f, category: e.target.value}))} className="px-3 py-2 rounded bg-slate-800 border border-white/10 text-blue-100">
+                {['All','DeFi','NFT','Tooling','Infra','Gaming','Social'].map(c => <option key={c}>{c}</option>)}
+              </select>
+              <select value={filters.chain} onChange={e=>setFilters(f=>({...f, chain: e.target.value}))} className="px-3 py-2 rounded bg-slate-800 border border-white/10 text-blue-100">
+                {['All','Ethereum','Polygon','Solana','Base','Arbitrum','Optimism'].map(c => <option key={c}>{c}</option>)}
+              </select>
             </div>
           </div>
+          <p className="text-blue-200/70 text-sm mt-1">Submit, upvote and discuss the latest decentralized apps.</p>
+        </section>
 
-          {/* Footer */}
-          <div className="text-center">
-            <p className="text-sm text-blue-300/60">
-              No coding required • Just describe what you want
-            </p>
+        {loading ? (
+          <p className="text-blue-200">Loading...</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {dapps.map(d => (
+              <DappCard key={d.id} dapp={d} onVote={vote} onOpenComments={openComments} />
+            ))}
           </div>
-        </div>
-      </div>
+        )}
+      </main>
+
+      <SubmitDappModal open={showSubmit} onClose={() => setShowSubmit(false)} onSubmit={submitDapp} />
+      <CommentsPanel dapp={activeDapp} open={commentsOpen} onClose={()=>setCommentsOpen(false)} backendUrl={backendUrl} />
     </div>
   )
 }
